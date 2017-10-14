@@ -1,0 +1,184 @@
+vcl 4.0;
+
+import std;
+import cookie;
+include "devicedetect.vcl";
+
+
+backend default {
+    .host = "8080";
+    .port = "fmweb";
+
+    .probe = {
+      #.url = "/"; # short easy way (GET /)
+      # We prefer to only do a HEAD /
+
+      .request =
+        "GET /ping HTTP/1.1"
+        "Host: "
+        "Connection: close"
+        "User-Agent: Varnish Health Probe";
+
+      .interval  = 5s; # check the health of each backend every 5 seconds
+      .timeout   = 1s; # timing out after 1 second.
+      .window    = 5;  # If 3 out of the last 5 polls succeeded the backend is considered healthy,
+                       # otherwise it will be marked as sick
+      .threshold = 3;
+    }
+
+    .connect_timeout = 60s;
+    .first_byte_timeout = 60s;
+    .between_bytes_timeout = 60s;
+    .max_connections = 800;
+}
+
+
+sub vcl_recv {
+
+    call devicedetect;
+
+    cookie.parse(req.http.cookie);
+
+    if (req.http.cookie) {
+        std.log("cookie value" + cookie.get("microSiteCode"));
+        set req.http.X-MicroSitecode = cookie.get("microSiteCode");
+    }
+
+    # If http-method is not a valid http-method, then return an error html
+    if (req.method != "GET" &&
+        req.method != "HEAD" &&
+        req.method != "PUT" &&
+        req.method != "POST" &&
+        req.method != "TRACE" &&
+        req.method != "OPTIONS" &&
+        req.method != "PATCH" &&
+        req.method != "DELETE") {
+
+        /* Non-RFC2616 or CONNECT which is weird. */
+        /*Why send the packet upstream, while the visitor is using a non-valid HTTP method? */
+        return(synth(404, "Non-valid HTTP method!"));
+    }
+
+    if (req.method == "POST" ||
+        req.method == "PUT" ||
+        req.method == "PATCH" ||
+        req.method == "DELETE") {
+
+        return (pass);
+    }
+
+    if (req.url ~ "\.(js|css|page)$"){
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+
+    # if (req.url ~ "/api/mega-menu"){
+    if (req.http.Cookie ~ "microSiteCode=([a-zA-Z]*);?"){
+        # set req.http.X-MicroSiteCode = regsub(req.http.Cookie, "microSiteCode=([a-zA-Z]*);?", "\1.");
+        # set req.url = req.url + "?" + regsub(req.http.Cookie, "(?:^|;\s*)(?:microSiteCode=(.*?))(?:;|$)", "\1.");
+    }
+    # }
+
+    if (req.url ~ "/\/api\/cms\-block(.*)?"){
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+    if (req.url ~ "/api/cms-block"){
+        std.log("cms block /api/cms-block");
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+    if (req.url ~ "cms"){
+        std.log("cms block /api/cms-block #2");
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+
+    if (req.url ~ "cms\-block"){
+        std.log("cms block /api/cms-block #2");
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+    if (req.url ~ "(cms\-block|cms\-blocks)(.*)?"){
+        std.log("cms block /api/cms-block #3");
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+
+
+    if (req.url ~ "/(category|pred\-search|page)(\/.*)?"){
+        # set req.url = regsub(req.url, "\?.*$", "");
+        return (hash);
+    }
+
+    if (req.url ~ "fpc"){
+        return (pass);
+    }
+
+    if (req.url ~ "\/fpay\/entity"){
+        return (pass);
+    }
+    if (req.url ~ "logout"){
+        return (pass);
+    }
+    if (req.url ~ "/mini-cart"){
+        return (pass);
+    }
+    if (req.url ~ "/cart"){
+        return (pass);
+    }
+    if (req.url ~ "/checkout"){
+        return (pass);
+    }
+    if (req.url ~ "checkout"){
+        return (pass);
+    }
+
+    return (hash);
+}
+
+sub vcl_hash {
+    # Called after vcl_recv to create a hash value for the request. This is used as a key
+    # to look up the object in Varnish.
+    hash_data(req.url + req.http.X-MicroSiteCode + req.http.X-UA_Device);
+}
+
+
+
+sub vcl_backend_response {
+    set beresp.do_esi = true;
+    if (bereq.http.X-UA-Device) {
+        if (!beresp.http.Vary) { # no Vary at all
+            set beresp.http.Vary = "X-UA-Device";
+        } elsif (beresp.http.Vary !~ "X-UA-Device") { # add to existing Vary
+            set beresp.http.Vary = beresp.http.Vary + ", X-UA-Device";
+        }
+    }
+    # comment this out if you don't want the client to know your classification
+    set beresp.http.X-UA-Device = bereq.http.X-UA-Device;
+    set beresp.ttl = 30m;
+}
+
+sub vcl_backend_fetch {
+    if (bereq.http.X-UA-Device) {
+        set bereq.http.User-Agent = bereq.http.X-UA-Device;
+    }
+}
+
+
+
+sub vcl_deliver {
+    if ((req.http.X-UA-Device) && (resp.http.Vary)) {
+        set resp.http.Vary = regsub(resp.http.Vary, "X-UA-Device", "User-Agent");
+    }
+
+    if (obj.hits > 0) {
+        set resp.http.X-Cache = "HIT";
+    } else {
+        set resp.http.X-Cache = "MISS";
+    }
+
+    set resp.http.X-Request-url = req.url;
+    set resp.http.X-Request-host = req.http.host;
+    set resp.http.X-Cache-Hits = obj.hits;
+}
