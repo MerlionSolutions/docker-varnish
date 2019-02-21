@@ -1,7 +1,3 @@
 #!/bin/bash
-set -e
 
-exec varnishd -n /var/varnish \
-        -f /etc/varnish/default.vcl \
-        -s malloc,${VARNISH_MEMORY} \
-        -a :${VARNISH_PORT}  -F
+/usr/local/bin/run_script.sh && cat /etc/varnish/default.vcl && varnishd -n /var/varnish -f /etc/varnish/default.vcl -s malloc,${VARNISH_MEMORY} -a 0.0.0.0:${VARNISH_PORT} -F

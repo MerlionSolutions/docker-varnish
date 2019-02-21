@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 cd /etc/varnish
+echo "replacing env var references in default.source.vcl..."
 
-BACKEND_HOST=$1 BACKEND_PORT=$2 eval "cat <<EOF
-$(</etc/varnish/default.source.vcl)
-EOF
-" 2> /dev/null > /etc/varnish/default.vcl
+cat /etc/varnish/default.source.vcl | BACKEND_HOST=${BACKEND_HOST} BACKEND_PORT=${BACKEND_PORT} envsubst > /etc/varnish/default.vcl
+
+echo "replacing env var references in default.source.vcl..."
+

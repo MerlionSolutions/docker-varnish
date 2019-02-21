@@ -21,6 +21,7 @@ RUN apt-get install -y \
   python-docutils \
   autotools-dev \
   python-sphinx \
+  gettext \
   graphviz
 
 # Install Varnish from source, so that Varnish modules can be compiled and installed.
@@ -50,15 +51,11 @@ RUN cd /var/www/html && git clone git://github.com/brandonwamboldt/varnish-dashb
 RUN apt-get install -y supervisor
 
 
-ARG port=80
-ARG memory=100m
-ARG backend_port=8080
-ARG backend_host=0.0.0.0
 
-ENV VARNISH_PORT=$port
-ENV BACKEND_PORT=$backend_port
-ENV BACKEND_HOST=$backend_host
-ENV VARNISH_MEMORY=$memory
+ENV VARNISH_PORT=80
+ENV BACKEND_PORT=8080
+ENV BACKEND_HOST=0.0.0.0
+ENV VARNISH_MEMORY=100m
 
 EXPOSE 80
 EXPOSE 6083
@@ -74,5 +71,6 @@ RUN chmod +x /usr/local/bin/run_script.sh && /usr/local/bin/run_script.sh ${BACK
 
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+#CMD ["/usr/local/bin/start-varnishd"]
 
 # ONBUILD COPY default.vcl /etc/varnish/default.vcl
