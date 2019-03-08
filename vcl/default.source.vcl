@@ -2,6 +2,7 @@ vcl 4.0;
 import std;
 import directors;
 import cookie;
+include "devicedetect.vcl";
 
 
 backend default {
@@ -48,6 +49,7 @@ sub vcl_recv {
   # Its purpose is to decide whether or not to serve the request, how to do it, and, if applicable,
   # which backend to use.
   # also used to modify the request
+  call devicedetect;
 
   set req.backend_hint = vdir.backend(); # send all traffic to the vdir director
 
